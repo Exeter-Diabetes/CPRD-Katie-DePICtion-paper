@@ -1,5 +1,5 @@
 
-# Pull out patient features for all in download - then can define prevalent (01/03/2023) and incident (at diagnosis) cohorts from this
+# Pull out patient features for all in download - then can define prevalent (01/03/2023) and incident (at diagnosis) cohorts from this (ended up not using at diagnosis cohort for analysis)
 
 ## Define diagnosis date based on earliest (cleaned) diabetes code and add in age at diagnosis
 
@@ -156,7 +156,11 @@ diabetes_type <- dm_code_counts %>%
     
   ) %>%
   
-  select(patid, diabetes_type, type1_code_count, type2_code_count, mody_code_count, days_since_type_code) %>%
+  mutate(gestational_dm_code_ever=ifelse(gestational>0 | `gestational history`>0, 1L, 0L),
+         secondary_dm_code_ever=ifelse(secondary>0, 1L, 0L),
+         other_dm_code_ever=ifelse(`other type not specified`>0 | `other/unspec genetic inc syndromic`>0 | `insulin receptor abs`>0 | malnutrition>0, 1L, 0L)) %>%
+         
+  select(patid, diabetes_type, type1_code_count, type2_code_count, mody_code_count, days_since_type_code, gestational_dm_code_ever, secondary_dm_code_ever, other_dm_code_ever) %>%
   
   analysis$cached("diabetes_type", unique_indexes="patid")
 
@@ -256,7 +260,7 @@ current_mix_insulin <- clean_insulin_prodcodes %>%
   analysis$cached("current_mix_insulin", unique_indexes="patid")
 
 
-## Add in treatment at 10 years-post-diagnosis for those registered years 9-10 and diagnosed >=1986 (1995-9)
+## Add in treatment at 10 years-post-diagnosis for those registered years 9-10 and diagnosed >=1997 (2006 = year 9)
 ### Do drug classes separately and then combine (ignore Acarbose)
 
 ten_yrs_post_diag <- diagnosis_dates %>%
@@ -271,7 +275,7 @@ ten_yrs_post_diag <- diagnosis_dates %>%
   
   mutate(ten_yrs_post_diag=sql("date_add(diagnosis_date, interval 10 year)"),
          nine_yrs_post_diag=sql("date_add(diagnosis_date, interval 9 year)")) %>%
-  mutate(ten_yrs_post_diag=if_else(year(diagnosis_date)>=1986 & regstartdate<=nine_yrs_post_diag & ten_yrs_post_diag<=gp_record_end & ten_yrs_post_diag<=latest_date, ten_yrs_post_diag, as.Date(NA))) %>%
+  mutate(ten_yrs_post_diag=if_else(year(diagnosis_date)>=1997 & regstartdate<=nine_yrs_post_diag & ten_yrs_post_diag<=gp_record_end & ten_yrs_post_diag<=latest_date, ten_yrs_post_diag, as.Date(NA))) %>%
   select(patid, gp_record_end, ten_yrs_post_diag) %>%
   analysis$cached("ten_yrs_post_diag", unique_indexes="patid")
 
@@ -357,18 +361,12 @@ diabetes_meds <- cprd$tables$patient %>%
                   "ten_yrs_insulin",
                   "ten_yrs_bolus_insulin"), coalesce, 0L)) %>%
   mutate(ten_yrs_oha=ifelse(ten_yrs_dpp4==1 | ten_yrs_gipglp1==1 | ten_yrs_glinide==1 | ten_yrs_glp1==1 | ten_yrs_mfn==1 | ten_yrs_sglt2==1 | ten_yrs_su==1 | ten_yrs_tzd==1, 1L, 0L),
-         ins_1_year=ifelse(year(diagnosis_date)<1995, NA,
-                           ifelse(is.na(earliest_ins) & datediff(gp_record_end, diagnosis_date)<=366, NA,
-                                  ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=366, 1L,
-                                         ifelse(!is.na(earliest_ins) & datediff(earliest_ins, regstartdate)<=366 & regstartdate>diagnosis_date, NA, 0L)))),
-         ins_2_years=ifelse(year(diagnosis_date)<1995, NA,
-                            ifelse(is.na(earliest_ins) & datediff(gp_record_end, diagnosis_date)<=731, NA,
-                                   ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=731, 1L,
-                                          ifelse(!is.na(earliest_ins) & datediff(earliest_ins, regstartdate)<=366 & datediff(earliest_ins, regstartdate)>366, NA, 0L)))),
-         ins_3_years=ifelse(year(diagnosis_date)<1995, NA,
-                            ifelse(is.na(earliest_ins) & datediff(gp_record_end, diagnosis_date)<=1096, NA,
-                                   ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=1096, 1L,
-                                          ifelse(!is.na(earliest_ins) & datediff(earliest_ins, regstartdate)<=366 & datediff(earliest_ins, regstartdate)>731, NA, 0L))))) %>%
+         ins_1_year=ifelse(year(diagnosis_date)<2006 | datediff(latest_date, diagnosis_date)<=366 | regstartdate>diagnosis_date, NA,
+                           ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=366, 1L, 0L)),
+         ins_2_years=ifelse(year(diagnosis_date)<2005 | datediff(latest_date, diagnosis_date)<=731 | datediff(regstartdate, diagnosis_date)>=366, NA,
+                            ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=731, 1L, 0L)),
+         ins_3_years=ifelse(year(diagnosis_date)<2004 | datediff(latest_date, diagnosis_date)<=1096 | datediff(regstartdate, diagnosis_date)>=731, NA,
+                            ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=1096, 1L, 0L))) %>%
   select(-gp_record_end) %>%
   analysis$cached("diabetes_meds", unique_indexes="patid")
 
@@ -850,9 +848,9 @@ at_diag_features <- cprd$tables$patient %>%
 
 # Add autoimmune conditions
 
-coeliac_codes <- read_delim("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Extra codelists/coeliac.txt")
+coeliac_codes <- read_delim("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/Julieanne progression/Final/autoimmune codelists/coeliac.txt")
 
-thyroid_codes <- read_delim("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Extra codelists/autoimmune_hypothyroidism.txt")
+thyroid_codes <- read_delim("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/Julieanne progression/Final/autoimmune codelists/hashimotos.txt")
 
 
 raw_coeliac <- cprd$tables$observation %>%
@@ -899,7 +897,7 @@ autoimmune <- cprd$tables$patient %>%
 dka_at_diagnosis <- cprd$tables$hesDiagnosisEpi %>%
   inner_join(codes$icd10_dka, by=c("ICD"="icd10")) %>%
   inner_join(diagnosis_dates, by="patid") %>%
-  filter(d_order==1 & epistart<=latest_date & abs(datediff(epistart, diagnosis_date)<=30)) %>%
+  filter(d_order==1 & epistart<=latest_date & abs(datediff(epistart, diagnosis_date))<=30) %>%
   distinct(patid) %>%
   mutate(dka_at_diagnosis=1L) %>%
   analysis$cached("dka_at_diagnosis", unique_indexes="patid")
@@ -917,7 +915,7 @@ earliest_dka <- cprd$tables$hesDiagnosisEpi %>%
 earliest_hypo <- cprd$tables$hesDiagnosisEpi %>%
   inner_join(codes$icd10_hypoglycaemia, by=c("ICD"="icd10")) %>%
   inner_join(diagnosis_dates, by="patid") %>%
-  filter(d_order==1 & epistart<=latest_date & datediff(epistart, diagnosis_date)>30) %>%
+  filter(d_order==1 & epistart<=latest_date & epistart>diagnosis_date) %>%
   group_by(patid) %>%
   summarise(earliest_hypo=min(epistart, na.rm=TRUE),
             hypo_count=n()) %>%
@@ -939,7 +937,7 @@ contact_count <- cprd$tables$observation %>%
 
 # Combine all
 
-dk_hypo_contacts <- cprd$tables$patient %>%
+dka_hypo_contacts <- cprd$tables$patient %>%
   select(patid) %>%
   left_join(dka_at_diagnosis, by="patid") %>%
   mutate(dka_at_diagnosis=ifelse(is.na(dka_at_diagnosis), 0L, 1L)) %>%
@@ -948,5 +946,5 @@ dk_hypo_contacts <- cprd$tables$patient %>%
   left_join(contact_count, by="patid") %>%
   mutate(dka_post_diagnosis=ifelse(!is.na(earliest_dka), 1L, 0L),
          hypo_post_diagnosis=ifelse(!is.na(earliest_hypo), 1L, 0L)) %>%
-  analysis$cached("dk_hypo_contacts", unique_indexes="patid")
+  analysis$cached("dka_hypo_contacts", unique_indexes="patid")
 
