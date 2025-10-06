@@ -381,7 +381,7 @@ pvals
 type_2_misclass_ins <- local_vars %>% filter(diabetes_type=="type 2" & t1_code_ever==0 & !is.na(ins_3_years) & ins_3_years==1) %>% mutate(group="type_2_misclass")
 outcomes_t2_cohort <- rbind(type_2_misclass_ins, ref_type_1, ref_type_2)
 
-outcomes_t2(outcomes_t2_cohort, group_name="overall_ins3yrs")
+outcomes_t2_ins3yrs(outcomes_t2_cohort, group_name="overall_ins3yrs")
 
 ref_type_2 %>% count() #25615
 ref_type_2 %>% filter(!is.na(ins_3_years)) %>% count() #8481

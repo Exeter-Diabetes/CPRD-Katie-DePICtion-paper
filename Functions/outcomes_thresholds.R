@@ -318,18 +318,18 @@ outcomes_thresholds_t2 <- function(cohort_dataset) {
   group_counts <- cohort_dataset %>% count(group, name = "n")
   
   legend_labels <- c(
-    "type_2_misclass_0.8" = "\nPotentially misclassified\nT2D using ≥80%\nmodel threshold\n",
-    "type_2_misclass_0.7" = "\nPotentially misclassified\nT2D using ≥70%\nmodel threshold\n",
-    "type_2_misclass_0.6" = "\nPotentially misclassified\nT2D using ≥60%\nmodel threshold\n",
-    "type_2_misclass_0.5" = "\nPotentially misclassified\nT2D using ≥50%\nmodel threshold\n",
-    "type_2_misclass_0.4" = "\nPotentially misclassified\nT2D using ≥40%\nmodel threshold\n",
-    "ref_type_1" = "\nCorrectly classified\nT1D",
-    "ref_type_2" = "\nCorrectly classified\nT2D"
+    "type_2_misclass_0.8" = "\nPotentially misclassified\nT2 (GP=T2, model=T1\nusing ≥80% threshold)\n",
+    "type_2_misclass_0.7" = "\nPotentially misclassified\nT2 (GP=T2, model=T1\nusing ≥70% threshold)\n",
+    "type_2_misclass_0.6" = "\nPotentially misclassified\nT2 (GP=T2, model=T1\nusing ≥60% threshold)\n",
+    "type_2_misclass_0.5" = "\nPotentially misclassified\nT2 (GP=T2, model=T1\nusing ≥50% threshold)\n",
+    "type_2_misclass_0.4" = "\nPotentially misclassified\nT2 (GP=T2, model=T1\nusing ≥40% threshold)\n",
+    "ref_type_1" = "\nCorrectly classified\nT1 (GP=T1, model=T1\nusing ≥80% threshold)\n",
+    "ref_type_2" = "\nCorrectly classified\nT2 (GP=T2, model=T2\nusing <5% threshold)\n"
   )
   
   legend_labels <- map2_chr(
     names(legend_labels), legend_labels,
-    ~ paste0(.y, " (n = ", format(group_counts$n[group_counts$group == .x], big.mark = ","), ")")
+    ~ paste0(.y, "n = ", format(group_counts$n[group_counts$group == .x], big.mark = ","))
   )
   
   max_y <- 1.5
@@ -351,7 +351,7 @@ outcomes_thresholds_t2 <- function(cohort_dataset) {
           panel.grid.major.y = element_line(size=1),
           panel.grid.minor.y = element_blank(),
           axis.title.x=element_blank(),
-          legend.text=element_text(size=20),
+          legend.text=element_text(size=19),
           legend.title = element_blank(),
           plot.margin = unit(c(0,0.7,0.7,0.7), "cm"))
   
@@ -633,16 +633,16 @@ outcomes_thresholds_t1 <- function(cohort_dataset) {
   group_counts <- cohort_dataset %>% count(group, name = "n")
   
   legend_labels <- c(
-    "type_1_misclass_0.025" = "\nPotentially misclassified\nT1D using <2.5%\nmodel threshold\n",
-    "type_1_misclass_0.05" = "\nPotentially misclassified\nT1D using <5%\nmodel threshold\n",
-    "type_1_misclass_0.1" = "\nPotentially misclassified\nT1D using <10%\nmodel threshold\n",
-    "ref_type_1" = "\nCorrectly classified\nT1D",
-    "ref_type_2" = "\nCorrectly classified\nT2D"
+    "type_1_misclass_0.025" = "\nPotentially misclassified\nT1 (GP=T1, model=T2\nusing <2.5% threshold)\n",
+    "type_1_misclass_0.05" = "\nPotentially misclassified\nT1 (GP=T1, model=T2\nusing <5% threshold)\n",
+    "type_1_misclass_0.1" = "\nPotentially misclassified\nT1 (GP=T1, model=T2\nusing <10%% threshold)\n",
+    "ref_type_1" = "\nCorrectly classified\nT1 (GP=T1, model=T1\nusing ≥80% threshold)\n",
+    "ref_type_2" = "\nCorrectly classified\nT2 (GP=T2, model=T2\nusing <5% threshold)\n"
   )
   
   legend_labels <- map2_chr(
     names(legend_labels), legend_labels,
-    ~ paste0(.y, " (n = ", format(group_counts$n[group_counts$group == .x], big.mark = ","), ")\n")
+    ~ paste0(.y, "n = ", format(group_counts$n[group_counts$group == .x], big.mark = ","), "\n")
   )
   
   max_y <- 1.5

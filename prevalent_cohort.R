@@ -201,7 +201,10 @@ cohort %>% group_by(diabetes_type) %>% count()
 
 # Diagnosis code in YOB
 cohort %>% inner_join(diagnosis_dates, by="patid") %>% filter(year(diagnosis_date)==year(dob)) %>% count()
-#
+#643
+
+test <- cohort %>% inner_join(diagnosis_dates, by="patid") %>% filter(year(diagnosis_date)==year(dob)) %>% select(patid, diagnosis_date, earliest_oha, earliest_ins, dob) %>% collect()
+#643
 
 
 
@@ -377,6 +380,16 @@ new_cohort <- rbind((local_data %>% mutate(new_group="overall")),
   mutate(new_group=factor(new_group, levels=c("overall", "male", "female", "White", "South Asian", "Black", "Mixed", "Other", "Missing", "imd_1", "imd_2", "imd_3", "imd_4", "imd_5")))
 
 
+new_cohort %>% filter(new_group=="overall") %>% count()
+#66269
+strat <- function (label, n, ...) {
+  perc <-  paste0(round_pad(as.numeric(n)*100/66269,1), "%")
+  sprintf("<span class='stratlabel'>%s<br><span class='stratn'>%s (%s)</span></span>", 
+          label, prettyNum(n, big.mark=","), perc)
+}
+table1(~ missing | new_group, data=new_cohort, overall=F, render.categorical=render_cat_ci(digits=1), render.strat=strat)
+
+
 new_cohort_t1 <- new_cohort %>% filter(diabetes_type=="type 1")
 new_cohort_t1 %>% filter(new_group=="overall") %>% count()
 #20,976
@@ -403,6 +416,41 @@ table1(~ missing | new_group, data=new_cohort_t2, overall=F, render.categorical=
 test <- local_data %>% group_by(pracid) %>% summarise(count=n(), missing=sum(missing==1), missing_perc=missing*100/count)
 
 summary(test$missing_perc)
+
+
+## Also look at time to biomarker measurements
+
+local_data <- cohort %>% select(index_bmidatediff, index_hdldatediff, index_totalcholesteroldatediff, index_triglyceridedatediff) %>% collect()
+
+datediffs <- local_data %>%
+  pivot_longer(
+    cols = starts_with("index_"),    
+    names_to = "measure",
+    values_to = "datediff"
+  )
+
+datediffs %>% filter(!is.na(datediff)) %>% count()
+#258361
+datediffs %>% filter(!is.na(datediff) & datediff>=-(2*365.25)) %>% count()
+#228054
+
+228054/258361 #88%
+
+datediffs <- local_data %>%
+  filter(!is.na(index_bmidatediff) & !is.na(index_hdldatediff) & !is.na(index_totalcholesteroldatediff) & !is.na(index_triglyceridedatediff)) %>%
+  pivot_longer(
+    cols = starts_with("index_"),    
+    names_to = "measure",
+    values_to = "datediff"
+  )
+
+datediffs %>% filter(!is.na(datediff)) %>% count()
+#248052
+datediffs %>% filter(!is.na(datediff) & datediff>=-(2*365.25)) %>% count()
+#219046
+
+219046/248052 #88%
+summary(datediffs)
 
 
 
