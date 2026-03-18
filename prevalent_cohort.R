@@ -140,136 +140,61 @@ cohort %>% count()
 # 1,076,147
 
 
-############################################################################################
-
-# Add 'current' diabetes type and exclude if not type 1 or type 2
+# Add 'current' diabetes type, and exclude those with GDM/pregnancy codes only as won't have a diagnosis date
 
 cohort <- cohort %>%
   inner_join(diabetes_type, by="patid") %>%
   mutate(t1_code_ever=ifelse(type1_code_count>0, 1L, 0L),
          t2_code_ever=ifelse(type2_code_count>0, 1L, 0L),
          diabetes_type=str_replace_all(diabetes_type, "mixed; ", "")) %>%
+ inner_join(diagnosis_dates, by="patid") %>%
   analysis$cached("cohort_interim_4", unique_indexes="patid")
 
 cohort %>% count()
-# 984,166
+# 939,320
 ## lose people diagnosed after index date
 
 
-# Look at breakdown of diabetes type
-
-# clipr::write_clip(cohort %>%
-#   filter(!(diabetes_type=="type 1" | diabetes_type=="type 2")) %>%
-#   group_by(diabetes_type) %>%
-#   summarise(count=n()) %>%
-#   collect())
-
-#n=215,134 unspecified
-#n=54,619 gestational or mixed; gestational
-#n=1499 secondary or mixed; secondary
-#n=1579 other
-
-
-cohort <- cohort %>%
-  filter(diabetes_type=="type 1" | diabetes_type=="type 2") %>%
-  analysis$cached("cohort_interim_5", unique_indexes="patid")
-
-cohort %>% count()
-#711,335
-
-cohort %>% group_by(diabetes_type) %>% count()
-# 1 type 2         661273
-# 2 type 1          50062
-
-
-############################################################################################
-
-# Add in treatment and exclude those not currently on insulin
-
-cohort <- cohort %>%
-  inner_join((diabetes_meds %>% select(-c(regstartdate, diagnosis_date))), by="patid") %>%
-  filter(current_insulin==1) %>%
-  analysis$cached("cohort_interim_6", unique_indexes="patid")
-
-cohort %>% count()
-#136,127
-
-cohort %>% group_by(diabetes_type) %>% count()
-# 1 type 2          87762
-# 2 type 1          48365
 
 
 # Diagnosis code in YOB
-cohort %>% inner_join(diagnosis_dates, by="patid") %>% filter(year(diagnosis_date)==year(dob)) %>% count()
-#643
+cohort %>% filter(year(diagnosis_date)==year(dob)) %>% count()
+#1,903
 
-test <- cohort %>% inner_join(diagnosis_dates, by="patid") %>% filter(year(diagnosis_date)==year(dob)) %>% select(patid, diagnosis_date, earliest_oha, earliest_ins, dob) %>% collect()
+cohort %>% inner_join((diabetes_meds %>% select(-c(regstartdate, diagnosis_date))), by="patid") %>% filter((diabetes_type=="type 1" | diabetes_type=="type 2") & current_insulin==1 & year(diagnosis_date)==year(dob)) %>% count()
 #643
-
 
 
 ############################################################################################
 
-# Add diagnosis dates and exclude if aged<18 or >50 years
+# Add diagnosis dates and exclude if aged<18 or >50 years or close to registration
+
+cohort %>% mutate(dm_diag_age=round((datediff(diagnosis_date, dob))/365.25, 1)) %>% filter(dm_diag_age<18) %>% count()
+#37,604
+
+cohort %>% mutate(dm_diag_age=round((datediff(diagnosis_date, dob))/365.25, 1)) %>% filter(dm_diag_age>=51) %>% count()
+#563,189
+
+cohort %>% mutate(dm_diag_age=round((datediff(diagnosis_date, dob))/365.25, 1)) %>% filter(dm_diag_age>=18 & dm_diag_age<51 & datediff(diagnosis_date, regstartdate)>=-30 & datediff(diagnosis_date, regstartdate)<=90) %>% count()
+#17,212
+
 
 cohort <- cohort %>%
-  inner_join(diagnosis_dates, by="patid") %>%
   mutate(dm_diag_age=round((datediff(diagnosis_date, dob))/365.25, 1),
          follow_up_time=datediff(index_date, diagnosis_date)/365.25) %>%
-  filter(dm_diag_age>=18 & dm_diag_age<51) %>%
-  analysis$cached("cohort_interim_7", unique_indexes="patid")
+  filter(dm_diag_age>=18 & dm_diag_age<51 & (datediff(diagnosis_date, regstartdate)<-30 | datediff(diagnosis_date, regstartdate)>90)) %>%
+  analysis$cached("cohort_interim_5", unique_indexes="patid")
 
 cohort %>% count()
-#70,348
-
-cohort %>% group_by(diabetes_type) %>% count()
-# 1 type 2          47612
-# 2 type 1          22736
-
-87762-47612
-48365-22736
+#321,315
 
 
 ############################################################################################
 
-# Data quality checking: remove if close to registration or type 1 and not on insulin within 5 years
-
-cohort %>% filter(datediff(diagnosis_date, regstartdate)>= -30 & datediff(diagnosis_date, regstartdate)<=90) %>% count()
-#3859
-cohort %>% filter(datediff(diagnosis_date, regstartdate)>= -30 & datediff(diagnosis_date, regstartdate)<=90) %>% group_by(diabetes_type) %>% count()
-# 1 type 1           1540
-# 2 type 2           2319
-
-
-cohort %>% mutate(ins_5_years=ifelse(year(diagnosis_date)<2002 | datediff(index_date, diagnosis_date)<=1827 | datediff(regstartdate, diagnosis_date)>=1461, NA,
-                                     ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=1827, 1L, 0L))) %>%
-  filter(diabetes_type=="type 1" & !is.na(ins_5_years) & ins_5_years==0) %>%
-  count()
-#239  
-  
-  
-cohort <- cohort %>%
-  filter((datediff(diagnosis_date, regstartdate)< -30 | datediff(diagnosis_date, regstartdate)>90)) %>%
-  mutate(ins_5_years=ifelse(year(diagnosis_date)<2002 | datediff(index_date, diagnosis_date)<=1827 | datediff(regstartdate, diagnosis_date)>=1461, NA,
-                            ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=1827, 1L, 0L))) %>%
-  filter(!(diabetes_type=="type 1" & !is.na(ins_5_years) & ins_5_years==0)) %>%
-  analysis$cached("cohort_interim_8", unique_indexes="patid")
-
-cohort %>% count()
-#66269
-
-cohort %>% group_by(diabetes_type) %>% count()
-# 1 type 2         45293
-# 2 type 1          20976
-
-70348-66269
-
-
-############################################################################################
-
-# Add in remaining features
+## Add in rest of data and insulin within 5 years
 
 cohort <- cohort %>%
+  inner_join((diabetes_meds %>% select(-c(regstartdate, diagnosis_date))), by="patid") %>%
   left_join(biomarkers, by="patid") %>%
   left_join(gad, by="patid") %>%
   left_join(ia2, by="patid") %>%
@@ -278,29 +203,82 @@ cohort <- cohort %>%
   left_join(at_diag_features, by="patid") %>%
   left_join(autoimmune, by="patid") %>%
   left_join(dka_hypo_contacts, by="patid") %>%
-  analysis$cached("cohort_interim_9", unique_indexes="patid")
+  mutate(ins_5_years=ifelse(year(diagnosis_date)<2002 | datediff(index_date, diagnosis_date)<=1827 | datediff(regstartdate, diagnosis_date)>=1461, NA,
+                            ifelse(!is.na(earliest_ins) & datediff(earliest_ins, diagnosis_date)<=1827, 1L, 0L))) %>%
+  analysis$cached("cohort_interim_6", unique_indexes="patid")
+
+cohort %>% count()
+#321,315
 
 
-## Check missing variables for model
+############################################################################################
 
-cohort %>% filter(is.na(index_bmi)) %>% count()
+# Missing data
+## All are mutually exclusive
+
+cohort %>% filter(diabetes_type=="unspecified") %>% count()
+#67943
+
+cohort %>% filter(str_detect(diabetes_type, fixed("&"))) %>% count()
+#374
+
+cohort %>% filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1 & (is.na(index_bmi) | is.na(index_totalcholesterol) | is.na(index_hdl) | is.na(index_triglyceride))) %>% count()
+#4257  
+  
+67943+374+4257
+
+cohort %>% filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1 & is.na(index_bmi)) %>% count()
 #798
-
-cohort %>% filter(is.na(index_totalcholesterol)) %>% count()
+cohort %>% filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1 & is.na(index_totalcholesterol)) %>% count()
 #896
-
-cohort %>% filter(is.na(index_hdl)) %>% count()
+cohort %>% filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1 & is.na(index_hdl)) %>% count()
 #1083
+cohort %>% filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1 & is.na(index_triglyceride)) %>% count()
+#3939
 
-cohort %>% filter(is.na(index_triglyceride)) %>% count()
-#3938
 
 
-cohort %>% filter(is.na(index_bmi) | is.na(index_totalcholesterol) | is.na(index_hdl) | is.na(index_triglyceride)) %>% count()
-#4,256
+# Diabetes type not under suspicion
+## All are mutually exclusive
+cohort %>% filter(diabetes_type=="gestational") %>% count()
+#9112
 
-4256/66269
+cohort %>% filter(diabetes_type=="secondary") %>% count()
+#518
 
+cohort %>% filter(diabetes_type!="unspecified" & diabetes_type!="gestational" & diabetes_type!="secondary" & !(str_detect(diabetes_type, fixed("&"))) & diabetes_type!="type 1" & diabetes_type!="type 2") %>% count()
+#342
+
+cohort %>% filter(diabetes_type=="type 2" & current_insulin==0) %>% count()
+#175849
+
+9112+518+342+175849
+
+
+
+# Likely coding errors
+## All are mutually exclusive 
+
+cohort %>% filter(diabetes_type=="type 1" & current_insulin==0) %>% count() 
+#684
+
+cohort %>% filter(diabetes_type=="type 1" & current_insulin==1 & ins_5_years==0) %>% count() 
+#220
+
+
+############################################################################################
+
+# Keep if T1 or T2 only and insulin treated / not coding errors so can look at missing data
+
+cohort <- cohort %>%
+  filter(((diabetes_type=="type 1" & (is.na(ins_5_years) | ins_5_years==1)) | diabetes_type=="type 2") & current_insulin==1) %>%
+  analysis$cached("cohort_interim_7", unique_indexes="patid")
+
+cohort %>% count()
+#66273
+
+
+############################################################################################
 
 # Look at missingness by sex, ethnicity, IMD
 
@@ -381,13 +359,15 @@ new_cohort <- rbind((local_data %>% mutate(new_group="overall")),
 
 
 new_cohort %>% filter(new_group=="overall") %>% count()
-#66269
-strat <- function (label, n, ...) {
-  perc <-  paste0(round_pad(as.numeric(n)*100/66269,1), "%")
-  sprintf("<span class='stratlabel'>%s<br><span class='stratn'>%s (%s)</span></span>", 
-          label, prettyNum(n, big.mark=","), perc)
-}
-table1(~ missing | new_group, data=new_cohort, overall=F, render.categorical=render_cat_ci(digits=1), render.strat=strat)
+#66273
+
+
+table1(
+  ~ missing | new_group,
+  data = new_cohort,
+  overall = FALSE,
+  render.categorical = render_cat_ci(digits = 1)
+)
 
 
 new_cohort_t1 <- new_cohort %>% filter(diabetes_type=="type 1")
@@ -430,11 +410,11 @@ datediffs <- local_data %>%
   )
 
 datediffs %>% filter(!is.na(datediff)) %>% count()
-#258361
+#258376
 datediffs %>% filter(!is.na(datediff) & datediff>=-(2*365.25)) %>% count()
-#228054
+#228069
 
-228054/258361 #88%
+228069/258376 #88%
 
 datediffs <- local_data %>%
   filter(!is.na(index_bmidatediff) & !is.na(index_hdldatediff) & !is.na(index_totalcholesteroldatediff) & !is.na(index_triglyceridedatediff)) %>%
@@ -445,25 +425,26 @@ datediffs <- local_data %>%
   )
 
 datediffs %>% filter(!is.na(datediff)) %>% count()
-#248052
+#248064
 datediffs %>% filter(!is.na(datediff) & datediff>=-(2*365.25)) %>% count()
-#219046
+#219058
 
-219046/248052 #88%
+219058/248064 #88%
+
 summary(datediffs)
 
 
 
 cohort <- cohort %>%
   filter(!is.na(index_bmi) & !is.na(index_totalcholesterol) & !is.na(index_hdl) & !is.na(index_triglyceride)) %>%
-  analysis$cached("cohort_interim_10", unique_indexes="patid")
+  analysis$cached("cohort_interim_8", unique_indexes="patid")
 
 cohort %>% count()
-#62013
+#62016
 
 cohort %>% group_by(diabetes_type) %>% count()
 
-# 1 type 2          43177
+# 1 type 2          43180
 # 2 type 1          18836
 
 
@@ -482,7 +463,7 @@ cohort <- cohort %>%
 
 
 cohort %>% count()
-#62013
+#62016
 
 cohort %>% filter(!is.na(lipid_pred_prob)) %>% count()
-#62013
+#62016

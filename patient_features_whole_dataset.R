@@ -111,10 +111,10 @@ dm_code_counts <- clean_diabetes_medcodes %>%
 ## Find latest type code, excluding unspecified and pregnancy and history of gestational diabetes, and keep date
 
 latest_type_code <- clean_diabetes_medcodes %>%
-  filter(category!="unspecified" & category!="gestational - history" & category!="pregnancy") %>%
+  filter(category!="unspecified" & category!="gestational history" & category!="pregnancy") %>%
   group_by(patid) %>%
   mutate(most_recent_date=max(date, na.rm=TRUE),
-         days_since_type_code=datediff(index_date, most_recent_date)) %>%
+         days_since_type_code=datediff(latest_date, most_recent_date)) %>%
   filter(date==most_recent_date) %>%
   ungroup() %>%
   group_by(patid, days_since_type_code) %>%
@@ -905,7 +905,7 @@ dka_at_diagnosis <- cprd$tables$hesDiagnosisEpi %>%
 earliest_dka <- cprd$tables$hesDiagnosisEpi %>%
   inner_join(codes$icd10_dka, by=c("ICD"="icd10")) %>%
   inner_join(diagnosis_dates, by="patid") %>%
-  filter(d_order==1 & epistart<=latest_date & datediff(epistart, diagnosis_date)>30) %>%
+  filter(d_order==1 & epistart<=latest_date & epistart>=diagnosis_date) %>%
   group_by(patid) %>%
   summarise(earliest_dka=min(epistart, na.rm=TRUE),
             dka_count=n()) %>%

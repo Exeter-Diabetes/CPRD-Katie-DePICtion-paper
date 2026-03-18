@@ -33,6 +33,8 @@ library(epitools)
 library(gridExtra)
 library(cowplot)
 library(grid)
+library(binom)
+library(ggpubr)
 rm(list=ls())
 
 cprd=CPRDData$new(cprdEnv="diabetes-jun2024", cprdConf="~/.aurum.yaml")
@@ -50,11 +52,6 @@ cat <- function(x, ...) {
 
 cont <- function(x) {
   with(stats.apply.rounding(stats.default(x)), c("Median (IQR)"=sprintf("%s (%s-%s)", round_pad(as.numeric(MEDIAN),1), round_pad(as.numeric(Q1),1), round_pad(as.numeric(Q3),1))))
-}
-
-strat <- function (label, n, ...) {
-  sprintf("<span class='stratlabel'>%s<br><span class='stratn'>(N=%s)</span></span>",
-          label, prettyNum(n, big.mark=","))
 }
 
 rndr <- function(x, name, ...) {
@@ -206,6 +203,7 @@ local_vars <- cohort %>%
          ten_yrs_post_diag=as.Date(ten_yrs_post_diag, format="%Y-%m-%d"))
 
 
+
 ############################################################################################
 
 # Define groups based on thresholds
@@ -232,7 +230,7 @@ ref_type_2 <- local_vars %>% filter(diabetes_type=="type 2" & t1_code_ever==0 & 
 
 t2_table_cohort <- rbind(type_2_all, type_2_misclass_miscode, type_2_misclass, ref_type_2)
 
-table1(~ lipid_prob_perc + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t1_code_ever | group, data=t2_table_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+table1(~ lipid_prob_perc + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t1_code_ever | group, data=t2_table_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 
 
 ### Look at pairwise p-values
@@ -254,8 +252,8 @@ get_pvalue <- function(var, group, data) {
 
 vars <- c("lipid_prob_perc", "malesex", "age_at_index", "ethnicity_decoded", "imd_quintiles", "dm_diag_age", "index_bmi", "index_hdl", "index_totalcholesterol", "index_triglyceride", "index_hba1c", "t1_code_ever")
 
-### Compare flagged to overall
-cohort <- t2_table_cohort %>% filter(group!="type_2_misclass" & group!="ref_type_2")
+## Compare flagged to correcly classified
+cohort <- t2_table_cohort %>% filter(group!="type_2_all" & group!="type_2_misclass" & ethnicity_decoded!="Missing") %>% mutate(ethnicity_decoded=factor(ethnicity_decoded))
 cohort %>% distinct(group)
 pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
   mutate(sig=ifelse(p<0.05, 1, NA))
@@ -294,27 +292,160 @@ t2_cohort_by_group <- rbind((type_2_all %>% mutate(new_group="overall")),
                               (type_2_all %>% filter(imd_quintiles==4) %>% mutate(new_group="imd_4")),
                               (type_2_all %>% filter(imd_quintiles==5) %>% mutate(new_group="imd_5"))) %>%
   mutate(new_group=factor(new_group, levels=c("overall", "male", "female", "White", "South Asian", "Black", "Mixed", "Other", "Missing", "imd_1", "imd_2", "imd_3", "imd_4", "imd_5")),
-         flagged=as.factor(ifelse(lipid_prob_perc>=80, 1, 0)))
+         flagged=as.factor(ifelse(lipid_prob_perc>=80, 1, 0)),
+         misclass=as.factor(ifelse(flagged==1 & t1_code_ever==0, 1, 0)))
 
-# With CIs for proportions
-table1(~ flagged | new_group, data=t2_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=2), render.continuous=cont, render.strat=strat)
 
 # Without CIs for proportions
-table1(~ lipid_prob_perc + malesex + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride | new_group, data=t2_cohort_by_group, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+table1(~ lipid_prob_perc + malesex + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride | new_group, data=t2_cohort_by_group, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 
-flagged_t2_cohort_by_group <- t2_cohort_by_group %>% filter(flagged==1)
 
-table1(~ t1_code_ever | new_group, data=flagged_t2_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=1), render.continuous=cont, render.strat=strat)
+t2_cohort_by_group_plot <- t2_cohort_by_group %>% mutate(miscode=as.factor(ifelse(flagged==1 & misclass==0, 1, 0)))
+
+t2_cohort_by_group_plot <- t2_cohort_by_group_plot %>%
+  filter(new_group!="Mixed" & new_group!="Other" & new_group!="Missing" & new_group!="imd_2" & new_group!="imd_3" & new_group!="imd_4") %>%
+  mutate(new_group=case_when(new_group=="male" ~ "Male",
+                              new_group=="female" ~ "Female",
+                              new_group=="overall" ~ "Overall",
+                              new_group=="imd_1" ~ "IMD quintile 1",
+                              new_group=="imd_5" ~ "IMD quintile 5",
+                              TRUE ~ new_group))
+  
+
+t2_cohort_by_group_plot$new_group <- factor(t2_cohort_by_group_plot$new_group,
+                              levels = c("IMD quintile 5", "IMD quintile 1","Black","South Asian",  "White", "Female","Male", "Overall"))
+
+
+plot_df <- t2_cohort_by_group_plot %>%
+  group_by(new_group) %>%
+  summarise(
+    flagged_n = sum(flagged == 1, na.rm = TRUE),
+    misclass_n = sum(misclass == 1, na.rm = TRUE),
+    miscode_n = sum(miscode == 1, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+library(binom)
+
+flagged_ci  <- binom.confint(plot_df$flagged_n,  plot_df$n, method = "wilson")
+misclass_ci <- binom.confint(plot_df$misclass_n, plot_df$n, method = "wilson")
+miscode_ci  <- binom.confint(plot_df$miscode_n,  plot_df$n, method = "wilson")
+
+
+plot_df <- plot_df %>%
+  mutate(
+    flagged_est  = flagged_ci$mean,
+    flagged_low  = flagged_ci$lower,
+    flagged_upp  = flagged_ci$upper,
+    
+    misclass_est = misclass_ci$mean,
+    misclass_low = misclass_ci$lower,
+    misclass_upp = misclass_ci$upper,
+    
+    miscode_est  = miscode_ci$mean,
+    miscode_low  = miscode_ci$lower,
+    miscode_upp  = miscode_ci$upper
+  )
+
+plot_long <- plot_df %>%
+  select(new_group,
+         flagged_est, flagged_low, flagged_upp,
+         misclass_est, misclass_low, misclass_upp,
+         miscode_est, miscode_low, miscode_upp) %>%
+  pivot_longer(
+    cols = -new_group,
+    names_to = c("outcome", ".value"),
+    names_pattern = "(flagged|misclass|miscode)_(est|low|upp)"
+  )
+
+plot_long <- plot_long %>%
+  mutate(outcome = recode(outcome,
+                          flagged  = "Potentially misclassified or miscoded (model=T1)",
+                          misclass = "Potentially misclassified (model=T1, no history of T1 codes)",
+                          miscode  = "Potentially miscoded (model=T1, history of T1 codes)"
+  ))
+
+plot_long$outcome <- factor(plot_long$outcome, levels=c("Potentially misclassified or miscoded (model=T1)", "Potentially misclassified (model=T1, no history of T1 codes)", "Potentially miscoded (model=T1, history of T1 codes)"))
+
+
+
+x_max <- 1.6
+arrow_length <- 0.03  # small offset inside axis
+
+# adjust truncated upper CI so arrow fits inside
+plot_long <- plot_long %>%
+  mutate(
+    upp_trunc2 = ifelse(upp * 100 > x_max, x_max - arrow_length, upp * 100),
+    arrow_needed = (upp * 100 > x_max),
+    est_pct = est * 100,
+    label_text = paste0(round(est_pct, 2), "%"),
+    row_id = as.numeric(factor(new_group)),                # numeric row
+    stripe = factor(row_id %% 2)                            # 0/1 as factor
+  )
+
+label_x <- -0.02 * x_max
+
+# plotting
+
+tiff("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Plots/t2_proportion_subgroup.tiff",
+     width = 10, height = 9, units = "in", res = 800)
+
+ggplot(plot_long, aes(x = est_pct, y = new_group)) +
+  # zebra stripes
+  geom_rect(
+    data = plot_long %>% distinct(new_group, row_id, stripe),
+    aes(
+      ymin = row_id - 0.5,
+      ymax = row_id + 0.5,
+      xmin = -Inf,
+      xmax = Inf,
+      fill = stripe
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.1
+  ) +
+  scale_fill_manual(values = c("white", "grey70"), guide = "none") +  # now works
+  # points
+  geom_point() +
+  # error bars
+  geom_errorbarh(aes(xmin = low * 100, xmax = upp_trunc2), height = 0) +
+  # arrows for truncated CIs
+  geom_segment(
+    data = subset(plot_long, arrow_needed),
+    aes(
+      x = x_max - arrow_length,
+      xend = x_max,
+      y = new_group,
+      yend = new_group
+    ),
+    arrow = arrow(length = unit(0.15, "cm"), ends = "last", type = "closed"),
+    inherit.aes = FALSE
+  ) +
+  # left-aligned % labels
+  geom_text(aes(y = new_group, label = label_text),
+            x = label_x,
+            hjust = 0,
+            size = 5) +
+  facet_wrap(~ outcome, ncol = 1) +
+  xlim(label_x, x_max) +
+  labs(x = "Percentage (%)", y = NULL) +
+  theme_classic(base_size = 16) +
+  theme(axis.text.y = element_text(hjust = 1))
+
+dev.off()
+
+
 
 
 
 
 ## Outcomes in misclassified compared to reference groups
 
-setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Functions/")
+setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Scripts/Functions/")
 source("outcomes.R")
 
-outcomes_t2_cohort <- rbind(type_2_misclass, ref_type_1, ref_type_2)
+outcomes_t2_cohort <- rbind(type_2_misclass, ref_type_2)
 
 outcomes_t2_cohort_by_group <- rbind((outcomes_t2_cohort %>% mutate(new_group="overall")),
                                  (outcomes_t2_cohort %>% filter(malesex==1) %>% mutate(new_group="male")),
@@ -331,7 +462,7 @@ outcomes_t2_cohort_by_group <- rbind((outcomes_t2_cohort %>% mutate(new_group="o
                                  (outcomes_t2_cohort %>% filter(imd_quintiles==4) %>% mutate(new_group="imd_4")),
                                  (outcomes_t2_cohort %>% filter(imd_quintiles==5) %>% mutate(new_group="imd_5")))
 
-new_groups <- c("overall", "male", "female", "White", "South Asian", "Black", "imd_1", "imd_2", "imd_3", "imd_4", "imd_5")
+new_groups <- c("overall", "male", "female", "White", "South Asian", "Black", "imd_1", "imd_5")
 
 
 for (i in new_groups) {
@@ -364,13 +495,29 @@ outcomes_t2_cohort %>%
 
 local_vars %>% filter(diabetes_type=="type 2") %>% count()
 local_vars %>% filter(diabetes_type=="type 2" & !is.na(ins_3_years)) %>% count()
-12496/43177 #28.9%
+12496/43180 #28.9%
 
 type_2_ins_3yrs_cohort <- local_vars %>%
   filter(diabetes_type=="type 2" & !is.na(ins_3_years)) %>%
   mutate(model_prob_over_80=factor(ifelse(lipid_prob_perc>=80, 1, 0)))
 
-table1(~ lipid_prob_perc + model_prob_over_80 + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t1_code_ever | ins_3_years, data=type_2_ins_3yrs_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+
+type_2_ins_3yrs_cohort %>% filter(ins_3_years==1) %>% count()
+#3,778
+3778/12496
+
+type_2_ins_3yrs_cohort %>% filter(ins_3_years==1 & t1_code_ever==0) %>% count()
+#3,311
+
+type_2_ins_3yrs_cohort %>% filter(ins_3_years==1 & t1_code_ever==1) %>% count()
+#3,311
+
+
+table1(~ lipid_prob_perc + model_prob_over_80 + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t1_code_ever | ins_3_years, data=type_2_ins_3yrs_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
+
+type_2_ins_3yrs_cohort_misclass_miscod <- type_2_ins_3yrs_cohort %>% filter(ins_3_years==1)
+
+table1(~ lipid_prob_perc + model_prob_over_80 + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c | t1_code_ever, data=type_2_ins_3yrs_cohort_misclass_miscod, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 
 ## Compare groups
 type_2_ins_3yrs_cohort %>% distinct(ins_3_years)
@@ -379,7 +526,7 @@ pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "ins_3_years", coho
 pvals
 
 type_2_misclass_ins <- local_vars %>% filter(diabetes_type=="type 2" & t1_code_ever==0 & !is.na(ins_3_years) & ins_3_years==1) %>% mutate(group="type_2_misclass")
-outcomes_t2_cohort <- rbind(type_2_misclass_ins, ref_type_1, ref_type_2)
+outcomes_t2_cohort <- rbind(type_2_misclass_ins, ref_type_2)
 
 outcomes_t2_ins3yrs(outcomes_t2_cohort, group_name="overall_ins3yrs")
 
@@ -392,6 +539,55 @@ ref_type_2 %>% filter(!is.na(ins_3_years) & ins_3_years==1) %>% count() #2076
 #24.5%
 
 
+
+
+# Type 2 and on insulin within 1 year
+
+setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Scripts/Functions/")
+source("outcomes.R")
+
+
+
+local_vars %>% filter(diabetes_type=="type 2") %>% count()
+local_vars %>% filter(diabetes_type=="type 2" & !is.na(ins_1_year)) %>% count()
+9835/43180 #22.8%
+
+type_2_ins_1yr_cohort <- local_vars %>%
+  filter(diabetes_type=="type 2" & !is.na(ins_1_year)) %>%
+  mutate(model_prob_over_80=factor(ifelse(lipid_prob_perc>=80, 1, 0)))
+
+
+type_2_ins_1yr_cohort %>% filter(ins_1_year==1) %>% count()
+#2150
+2150/9835 #21.9%
+
+type_2_ins_1yr_cohort %>% filter(ins_1_year==1 & t1_code_ever==0) %>% count()
+#1854/9835 #21.9%
+
+type_2_ins_1yr_cohort %>% filter(ins_1_year==1 & t1_code_ever==1) %>% count()
+#296
+
+
+table1(~ lipid_prob_perc + model_prob_over_80 + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t1_code_ever | ins_1_year, data=type_2_ins_1yr_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
+
+type_2_ins_1yr_cohort_misclass_miscod <- type_2_ins_1yr_cohort %>% filter(ins_1_year==1)
+
+table1(~ lipid_prob_perc + model_prob_over_80 + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c | t1_code_ever, data=type_2_ins_1yr_cohort_misclass_miscod, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
+
+
+type_2_misclass_ins <- local_vars %>% filter(diabetes_type=="type 2" & t1_code_ever==0 & !is.na(ins_1_year) & ins_1_year==1) %>% mutate(group="type_2_misclass")
+outcomes_t2_cohort <- rbind(type_2_misclass_ins, ref_type_2)
+
+outcomes_t2_ins1yr(outcomes_t2_cohort, group_name="overall_ins1yr")
+
+ref_type_2 %>% count() #25615
+ref_type_2 %>% filter(!is.na(ins_3_years)) %>% count() #8481
+8481/25615
+#33.1%
+ref_type_2 %>% filter(!is.na(ins_3_years) & ins_3_years==1) %>% count() #2076
+2076/8481
+#24.5%
+
 ############################################################################################
 
 # Current type 1
@@ -400,10 +596,10 @@ ref_type_2 %>% filter(!is.na(ins_3_years) & ins_3_years==1) %>% count() #2076
 
 t1_table_cohort <- rbind(type_1_all, type_1_misclass_miscode, type_1_misclass, ref_type_1)
 
-table1(~ lipid_prob_perc + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t2_code_ever | group, data=t1_table_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+table1(~ lipid_prob_perc + malesex + age_at_index + ethnicity_decoded + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride + index_hba1c + t2_code_ever | group, data=t1_table_cohort, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 
 # Look at ethnicity-deprivation relationship
-table1(~ imd_quintiles | ethnicity_decoded, data=type_1_all, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+table1(~ imd_quintiles | ethnicity_decoded, data=type_1_all, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 #Overall, South Asian, Black, Mixed and Other all have more deprivation that White - true for type 2 too
 
 
@@ -467,25 +663,169 @@ t1_cohort_by_group <- rbind((type_1_all %>% mutate(new_group="overall")),
                             (type_1_all %>% filter(imd_quintiles==4) %>% mutate(new_group="imd_4")),
                             (type_1_all %>% filter(imd_quintiles==5) %>% mutate(new_group="imd_5"))) %>%
   mutate(new_group=factor(new_group, levels=c("overall", "male", "female", "White", "South Asian", "Black", "Mixed", "Other", "Missing", "imd_1", "imd_2", "imd_3", "imd_4", "imd_5")),
-         flagged=as.factor(ifelse(lipid_prob_perc<5, 1, 0)))
+         flagged=as.factor(ifelse(lipid_prob_perc<5, 1, 0)),
+         misclass=as.factor(ifelse(flagged==1 & t2_code_ever==0, 1, 0)))
 
 # With CIs for proportions
-table1(~ flagged | new_group, data=t1_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=1), render.continuous=cont, render.strat=strat)
+table1(~ flagged + misclass | new_group, data=t1_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=1), render.continuous=cont)
 
 # Without CIs for proportions
-table1(~ lipid_prob_perc + malesex + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride | new_group, data=t1_cohort_by_group, overall=F, render=rndr, render.categorical=cat, render.continuous=cont, render.strat=strat)
+table1(~ lipid_prob_perc + malesex + imd_quintiles + dm_diag_age + index_bmi + index_hdl + index_totalcholesterol + index_triglyceride | new_group, data=t1_cohort_by_group, overall=F, render=rndr, render.categorical=cat, render.continuous=cont)
 
 flagged_t1_cohort_by_group <- t1_cohort_by_group %>% filter(flagged==1)
 
-table1(~ t2_code_ever | new_group, data=flagged_t1_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=1), render.continuous=cont, render.strat=strat)
+table1(~ t2_code_ever | new_group, data=flagged_t1_cohort_by_group, overall=F, render=rndr, render.categorical=render_cat_ci(digits=1), render.continuous=cont)
+
+
+
+
+
+t1_cohort_by_group_plot <- t1_cohort_by_group %>% mutate(miscode=as.factor(ifelse(flagged==1 & misclass==0, 1, 0)))
+
+t1_cohort_by_group_plot <- t1_cohort_by_group_plot %>%
+  filter(new_group!="Mixed" & new_group!="Other" & new_group!="Missing" & new_group!="imd_2" & new_group!="imd_3" & new_group!="imd_4") %>%
+  mutate(new_group=case_when(new_group=="male" ~ "Male",
+                             new_group=="female" ~ "Female",
+                             new_group=="overall" ~ "Overall",
+                             new_group=="imd_1" ~ "IMD quintile 1",
+                             new_group=="imd_5" ~ "IMD quintile 5",
+                             TRUE ~ new_group))
+
+
+t1_cohort_by_group_plot$new_group <- factor(t1_cohort_by_group_plot$new_group,
+                                            levels = c("IMD quintile 5", "IMD quintile 1","Black","South Asian",  "White", "Female","Male", "Overall"))
+
+
+plot_df <- t1_cohort_by_group_plot %>%
+  group_by(new_group) %>%
+  summarise(
+    flagged_n = sum(flagged == 1, na.rm = TRUE),
+    misclass_n = sum(misclass == 1, na.rm = TRUE),
+    miscode_n = sum(miscode == 1, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+library(binom)
+
+flagged_ci  <- binom.confint(plot_df$flagged_n,  plot_df$n, method = "wilson")
+misclass_ci <- binom.confint(plot_df$misclass_n, plot_df$n, method = "wilson")
+miscode_ci  <- binom.confint(plot_df$miscode_n,  plot_df$n, method = "wilson")
+
+
+plot_df <- plot_df %>%
+  mutate(
+    flagged_est  = flagged_ci$mean,
+    flagged_low  = flagged_ci$lower,
+    flagged_upp  = flagged_ci$upper,
+    
+    misclass_est = misclass_ci$mean,
+    misclass_low = misclass_ci$lower,
+    misclass_upp = misclass_ci$upper,
+    
+    miscode_est  = miscode_ci$mean,
+    miscode_low  = miscode_ci$lower,
+    miscode_upp  = miscode_ci$upper
+  )
+
+plot_long <- plot_df %>%
+  select(new_group,
+         flagged_est, flagged_low, flagged_upp,
+         misclass_est, misclass_low, misclass_upp,
+         miscode_est, miscode_low, miscode_upp) %>%
+  pivot_longer(
+    cols = -new_group,
+    names_to = c("outcome", ".value"),
+    names_pattern = "(flagged|misclass|miscode)_(est|low|upp)"
+  )
+
+plot_long <- plot_long %>%
+  mutate(outcome = recode(outcome,
+                          flagged  = "Potentially misclassified or miscoded (model=T2)",
+                          misclass = "Potentially misclassified (model=T2, no history of T2 codes)",
+                          miscode  = "Potentially miscoded (model=T2, history of T2 codes)"
+  ))
+
+plot_long$outcome <- factor(plot_long$outcome, levels=c("Potentially misclassified or miscoded (model=T2)", "Potentially misclassified (model=T2, no history of T2 codes)", "Potentially miscoded (model=T2, history of T2 codes)"))
+
+
+
+x_max <- 20
+arrow_length <- 0.03  # small offset inside axis
+
+# adjust truncated upper CI so arrow fits inside
+plot_long <- plot_long %>%
+  mutate(
+    upp_trunc2 = ifelse(upp * 100 > x_max, x_max - arrow_length, upp * 100),
+    arrow_needed = (upp * 100 > x_max),
+    est_pct = est * 100,
+    label_text = paste0(round(est_pct, 1), "%"),
+    row_id = as.numeric(factor(new_group)),                # numeric row
+    stripe = factor(row_id %% 2)                            # 0/1 as factor
+  )
+
+label_x <- -0.02 * x_max
+
+# plotting
+
+tiff("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Plots/t1_proportion_subgroup.tiff",
+     width = 10, height = 9, units = "in", res = 800)
+
+ggplot(plot_long, aes(x = est_pct, y = new_group)) +
+  # zebra stripes
+  geom_rect(
+    data = plot_long %>% distinct(new_group, row_id, stripe),
+    aes(
+      ymin = row_id - 0.5,
+      ymax = row_id + 0.5,
+      xmin = -Inf,
+      xmax = Inf,
+      fill = stripe
+    ),
+    inherit.aes = FALSE,
+    alpha = 0.1
+  ) +
+  scale_fill_manual(values = c("white", "grey70"), guide = "none") +  # now works
+  # points
+  geom_point() +
+  # error bars
+  geom_errorbarh(aes(xmin = low * 100, xmax = upp_trunc2), height = 0) +
+  # arrows for truncated CIs
+  geom_segment(
+    data = subset(plot_long, arrow_needed),
+    aes(
+      x = x_max - arrow_length,
+      xend = x_max,
+      y = new_group,
+      yend = new_group
+    ),
+    arrow = arrow(length = unit(0.15, "cm"), ends = "last", type = "closed"),
+    inherit.aes = FALSE
+  ) +
+  # left-aligned % labels
+  geom_text(aes(y = new_group, label = label_text),
+            x = label_x,
+            hjust = 0,
+            size = 5) +
+  facet_wrap(~ outcome, ncol = 1) +
+  xlim(label_x, x_max) +
+  labs(x = "Percentage (%)", y = NULL) +
+  theme_classic(base_size = 16) +
+  theme(axis.text.y = element_text(hjust = 1))
+
+dev.off()
+
+
+
+
 
 
 ## Outcomes
 
-setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Functions/")
+setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Scripts/Functions/")
 source("outcomes.R")
 
-outcomes_t1_cohort <- rbind(type_1_misclass, ref_type_1, ref_type_2)
+outcomes_t1_cohort <- rbind(type_1_misclass, ref_type_1)
 
 outcomes_t1_cohort_by_group <- rbind((outcomes_t1_cohort %>% mutate(new_group="overall")),
                                      (outcomes_t1_cohort %>% filter(malesex==1) %>% mutate(new_group="male")),
@@ -502,7 +842,7 @@ outcomes_t1_cohort_by_group <- rbind((outcomes_t1_cohort %>% mutate(new_group="o
                                      (outcomes_t1_cohort %>% filter(imd_quintiles==4) %>% mutate(new_group="imd_4")),
                                      (outcomes_t1_cohort %>% filter(imd_quintiles==5) %>% mutate(new_group="imd_5")))
 
-new_groups <- c("overall", "male", "female", "White", "South Asian", "Black", "imd_1", "imd_2", "imd_3", "imd_4", "imd_5")
+new_groups <- c("overall", "male", "female", "White", "South Asian", "Black", "imd_1", "imd_5")
 
 for (i in new_groups) {
   
@@ -517,6 +857,29 @@ compare_t1_sex(outcomes_t1_cohort)
 compare_t1_ethnicity(outcomes_t1_cohort)
 
 compare_t1_deprivation(outcomes_t1_cohort)
+
+
+
+# Check whether BMI is making difference for IMD groups
+
+type_1_all %>% filter(imd_quintiles==1) %>% summarise(mean_bmi=mean(index_bmi),  #27.3
+                                                      flagged=sum(lipid_prob_perc<5),
+                                                      count=n())
+
+type_1_all %>% filter(imd_quintiles==5) %>% summarise(mean_bmi=mean(index_bmi), #28.1
+                                                      flagged=sum(lipid_prob_perc<5),
+                                                      count=n())
+
+type_1_all %>%
+  filter(imd_quintiles==1) %>%
+  mutate(index_bmi=27.3,
+         femalesex=ifelse(gender==2, 1, ifelse(gender==1, 0, NA)),
+         lipid_pred_score=9.0034272-(0.1915482*index_bmi)-(0.1686227*dm_diag_age)+(0.3026012*femalesex)-(0.2269216*index_totalcholesterol)+(1.540850*index_hdl)-(0.2784059*index_triglyceride),
+         lipid_pred_prob=exp(lipid_pred_score)/(1+exp(lipid_pred_score)),
+         lipid_prob_perc=lipid_pred_prob*100) %>%
+  summarise(flagged=sum(lipid_prob_perc<5),
+            count=n())
+#328/3896 - many fewer flagged, so could be
 
 
 
@@ -548,88 +911,112 @@ model_cohort <- rbind(type_1_all, type_2_all)
 
 # High scorers
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob)) %>% count()
-#43177
+#43180
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8) %>% count()
 #406
-406*100/43177
+406*100/43180
 (406/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7) %>% count()
 #759
-759*100/43177
+759*100/43180
 (759/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6) %>% count()
 #1239
-1239*100/43177
+1239*100/43180
 (1239/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5) %>% count()
 #1853
-1853*100/43177
+1853*100/43180
 (1853/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4) %>% count()
 #2724
-2724*100/43177
+2724*100/43180
 (2724/14612726)*10000
+model_cohort %>% filter(diabetes_type=="type 2" & !is.na(ins_1_year) & ins_1_year==1) %>% count()
+#2150
+2150*100/43180
+(2150/14612726)*10000
+model_cohort %>% filter(diabetes_type=="type 2" & !is.na(ins_3_years) & ins_3_years==1) %>% count()
+#3778
+3778*100/43180
+(3778/14612726)*10000
 
 
 # Range per practice
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4)) %>% collect())$count)
+
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(ins_3_years) & ins_3_years==1)) %>% collect())$count)
+
+
 
 
 ### Misclassified
 
 # High scorers
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob)) %>% count()
-#43177
+#43180
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8 & t1_code_ever==0) %>% count()
 #248
-248*100/43177
+248*100/43180
 (248/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7 & t1_code_ever==0) %>% count()
 #513
-513*100/43177
+513*100/43180
 (513/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6 & t1_code_ever==0) %>% count()
 #876
-876*100/43177
+876*100/43180
 (876/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5 & t1_code_ever==0) %>% count()
 #1372
-1372*100/43177
+1372*100/43180
 (1372/14612726)*10000
 model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4 & t1_code_ever==0) %>% count()
 #2111
-2111*100/43177
+2111*100/43180
 (2111/14612726)*10000
-
+model_cohort %>% filter(diabetes_type=="type 2" & !is.na(ins_1_year) & ins_1_year==1 & t1_code_ever==0) %>% count()
+#1854
+1854*100/43180
+(1854/14612726)*10000
+model_cohort %>% filter(diabetes_type=="type 2" & !is.na(ins_3_years) & ins_3_years==1 & t1_code_ever==0) %>% count()
+#3778
+3311*100/43180
+(3311/14612726)*10000
 
 
 # Range per practice
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8 & t1_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8 & t1_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7 & t1_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7 & t1_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6 & t1_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6 & t1_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5 & t1_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.5 & t1_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4 & t1_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.4 & t1_code_ever==0)) %>% collect())$count)
+
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 2" & !is.na(ins_3_years) & ins_3_years==1 & t1_code_ever==0)) %>% collect())$count)
+
+
+
+
 
 
 ### Outcomes for misclassified
 
-setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Functions/")
+setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Scripts/Functions/")
 source("outcomes_thresholds.R")
 
-outcomes_t2_thresholds_cohort <- rbind(ref_type_1,
-                                       ref_type_2,
+outcomes_t2_thresholds_cohort <- rbind(ref_type_2,
                                        (model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.8 & t1_code_ever==0) %>% mutate(group="type_2_misclass_0.8")),
                                        (model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.7 & t1_code_ever==0) %>% mutate(group="type_2_misclass_0.7")),
                                        (model_cohort %>% filter(diabetes_type=="type 2" & !is.na(lipid_pred_prob) & lipid_pred_prob>=0.6 & t1_code_ever==0) %>% mutate(group="type_2_misclass_0.6")),
@@ -665,11 +1052,11 @@ model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipi
 
 
 # Range per practice
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.025) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.025)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.05) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.05)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.1) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.1)) %>% collect())$count)
 
 
 
@@ -693,22 +1080,21 @@ model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipi
 (2396/14612726)*10000
 
 # Range per practice
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.025 & t2_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.025 & t2_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.05 & t2_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.05 & t2_code_ever==0)) %>% collect())$count)
 
-summary((model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.1 & t2_code_ever==0) %>% group_by(pracid) %>% summarise(count=n()) %>% collect())$count)
+summary((model_cohort %>% group_by(pracid) %>% summarise(count=sum(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.1 & t2_code_ever==0)) %>% collect())$count)
 
 
 
 
 ### Outcomes for misclassified
 
-setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2025/DePICtion/Paper/Scripts/Functions/")
+setwd("C:/Users/ky279/OneDrive - University of Exeter/CPRD/2026/DePICtion/Scripts/Functions/")
 source("outcomes_thresholds.R")
 
 outcomes_t1_thresholds_cohort <- rbind(ref_type_1,
-                                       ref_type_2,
                                        (model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.025 & t2_code_ever==0) %>% mutate(group="type_1_misclass_0.025")),
                                        (model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.05 & t2_code_ever==0) %>% mutate(group="type_1_misclass_0.05")),
                                        (model_cohort %>% filter(diabetes_type=="type 1" & !is.na(lipid_pred_prob) & lipid_pred_prob<0.1 & t2_code_ever==0) %>% mutate(group="type_1_misclass_0.1")))
