@@ -252,29 +252,14 @@ get_pvalue <- function(var, group, data) {
 
 vars <- c("lipid_prob_perc", "malesex", "age_at_index", "ethnicity_decoded", "imd_quintiles", "dm_diag_age", "index_bmi", "index_hdl", "index_totalcholesterol", "index_triglyceride", "index_hba1c", "t1_code_ever")
 
-## Compare flagged to correcly classified
-cohort <- t2_table_cohort %>% filter(group!="type_2_all" & group!="type_2_misclass" & ethnicity_decoded!="Missing") %>% mutate(ethnicity_decoded=factor(ethnicity_decoded))
+## Compare misclassified to correctly classified
+cohort <- t2_table_cohort %>% filter(group!="type_2_all" & group!="type_2_misclass_miscode") %>% mutate(ethnicity_decoded=factor(ethnicity_decoded))
 cohort %>% distinct(group)
 pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
   mutate(sig=ifelse(p<0.05, 1, NA))
 pvals
 # all are significantly different except IMD
 
-## Compare flagged to misclassified
-cohort <- t2_table_cohort %>% filter(group!="type_2_all" & group!="ref_type_2" & ethnicity_decoded!="Missing") %>% mutate(ethnicity_decoded=factor(ethnicity_decoded))
-cohort %>% distinct(group)
-pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
-  mutate(sig=ifelse(p<0.05, 1, NA))
-pvals
-# none are different except type 1 code ever - obviously
-
-## Compare reference to all
-cohort <- t2_table_cohort %>% filter(group!="type_2_misclass" & group!="type_2_misclass_miscode")
-cohort %>% distinct(group)
-pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
-  mutate(sig=ifelse(p<0.05, 1, NA))
-pvals
-# all are sig
 
 
 t2_cohort_by_group <- rbind((type_2_all %>% mutate(new_group="overall")),
@@ -623,29 +608,14 @@ get_pvalue <- function(var, group, data) {
 vars <- c("lipid_prob_perc", "malesex", "age_at_index", "ethnicity_decoded", "imd_quintiles", "dm_diag_age", "index_bmi", "index_hdl", "index_totalcholesterol", "index_triglyceride", "index_hba1c", "t2_code_ever")
 
 
-### Compare flagged to overall
-cohort <- t1_table_cohort %>% filter(group!="type_1_misclass" & group!="ref_type_1")
+## Compare misclassified to correctly classified
+cohort <- t1_table_cohort %>% filter(group!="type_1_all" & group!="type_1_misclass_miscode") %>% mutate(ethnicity_decoded=factor(ethnicity_decoded))
 cohort %>% distinct(group)
 pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
   mutate(sig=ifelse(p<0.05, 1, NA))
 pvals
 # all are significantly different except total cholesterol
 
-## Compare flagged to misclassified
-cohort <- t1_table_cohort %>% filter(group!="ref_type_1" & group!="type_1_all")
-cohort %>% distinct(group)
-pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
-  mutate(sig=ifelse(p<0.05, 1, NA))
-pvals
-# None are sig except current age and diagnosis age and T2 code ever
-
-## Compare reference to all
-cohort <- t1_table_cohort %>% filter(group!="type_1_misclass" & group!="type_1_misclass_miscode")
-cohort %>% distinct(group)
-pvals <- data.frame(p=sapply(vars, function(v) get_pvalue(v, "group", cohort))) %>%
-  mutate(sig=ifelse(p<0.05, 1, NA))
-pvals
-# all are sig except total cholesterol
 
 
 t1_cohort_by_group <- rbind((type_1_all %>% mutate(new_group="overall")),
@@ -1177,10 +1147,114 @@ cohort %>% filter(!is.na(earliest_c_pep_ins_deficient) | !is.na(earliest_c_pep_i
 cohort %>% filter(!is.na(earliest_positive_gad) | !is.na(earliest_negative_gad) | !is.na(earliest_positive_ia2) | !is.na(earliest_negative_ia2)) %>% count()
 #762
 
+
+
 cohort %>% filter(!is.na(earliest_c_pep_ins_deficient) | !is.na(earliest_c_pep_ins_intermediate) | !is.na(earliest_c_pep_ins_normal) | !is.na(earliest_positive_gad) | !is.na(earliest_negative_gad) | !is.na(earliest_positive_ia2) | !is.na(earliest_negative_ia2)) %>% count()
 #1602
+1602/62016 #2.6%
 
 
+## Check by group
 
+library(dplyr)
+library(purrr)
 
+#------------------------------------------------------------
+# 1. Base cohort + derived variables
+#------------------------------------------------------------
+cohort <- cohort %>% select(
+  patid,
+  diabetes_type,
+  lipid_pred_prob,
+  t1_code_ever,
+  t2_code_ever,
+  earliest_c_pep_ins_deficient,
+  earliest_c_pep_ins_intermediate,
+  earliest_c_pep_ins_normal,
+  earliest_positive_gad,
+  earliest_negative_gad,
+  earliest_positive_ia2,
+  earliest_negative_ia2
+) %>% collect()
+
+cohort2 <- cohort %>%
+  mutate(
+    lipid_prob_perc = lipid_pred_prob * 100,
+    
+    has_biomarkers = if_any(
+      c(
+        earliest_c_pep_ins_deficient,
+        earliest_c_pep_ins_intermediate,
+        earliest_c_pep_ins_normal,
+        earliest_positive_gad,
+        earliest_negative_gad,
+        earliest_positive_ia2,
+        earliest_negative_ia2
+      ),
+      ~ !is.na(.x)
+    )
+  )
+
+#------------------------------------------------------------
+# 2. Define group conditions (NO formulas, just logicals)
+#------------------------------------------------------------
+
+group_defs <- list(
+  type_1_all = cohort2$diabetes_type == "type 1",
+  type_1_misclass_miscode = cohort2$diabetes_type == "type 1" & cohort2$lipid_prob_perc < 5,
+  type_1_misclass = cohort2$diabetes_type == "type 1" & cohort2$t2_code_ever == 0 & cohort2$lipid_prob_perc < 5,
+  type_1_miscod = cohort2$diabetes_type == "type 1" & cohort2$t2_code_ever == 1 & cohort2$lipid_prob_perc < 5,
+  ref_type_1 = cohort2$diabetes_type == "type 1" & cohort2$t2_code_ever == 0 & cohort2$lipid_prob_perc >= 80,
+  
+  type_2_all = cohort2$diabetes_type == "type 2",
+  type_2_misclass_miscode = cohort2$diabetes_type == "type 2" & cohort2$lipid_prob_perc >= 80,
+  type_2_misclass = cohort2$diabetes_type == "type 2" & cohort2$t1_code_ever == 0 & cohort2$lipid_prob_perc >= 80,
+  type_2_miscod = cohort2$diabetes_type == "type 2" & cohort2$t1_code_ever == 1 & cohort2$lipid_prob_perc >= 80,
+  ref_type_2 = cohort2$diabetes_type == "type 2" & cohort2$t1_code_ever == 0 & cohort2$lipid_prob_perc < 5
+)
+
+#------------------------------------------------------------
+# 3. Build overlap-safe membership table
+#------------------------------------------------------------
+
+membership <- imap_dfr(group_defs, function(idx, name) {
+  cohort2 %>%
+    filter(idx) %>%
+    transmute(
+      id = row_number(),   # replace with patient_id if you have one
+      group = name
+    )
+})
+
+#------------------------------------------------------------
+# 4. Attach biomarker flag
+#------------------------------------------------------------
+
+cohort_index <- cohort2 %>%
+  mutate(id = row_number()) %>%
+  select(id, has_biomarkers)
+
+membership_full <- membership %>%
+  left_join(cohort_index, by = "id")
+
+#------------------------------------------------------------
+# 5. Final summary table
+#------------------------------------------------------------
+
+summary_table <- membership_full %>%
+  group_by(group) %>%
+  summarise(
+    total = n(),
+    with_biomarkers = sum(has_biomarkers, na.rm = TRUE),
+    without_biomarkers = sum(!has_biomarkers, na.rm = TRUE),
+    prop_with_biomarkers = mean(has_biomarkers, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(group)
+
+#------------------------------------------------------------
+# 6. Output
+#------------------------------------------------------------
+
+print(summary_table)
 
