@@ -202,7 +202,7 @@ outcomes_t2 <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Incidence rate (per 100 person-years)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits = c(0, max_y)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -223,7 +223,7 @@ outcomes_t2 <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Percentage (%)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits=c(0,105), breaks=c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -448,7 +448,7 @@ outcomes_t2_ins3yrs <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Incidence rate (per 100 person-years)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits = c(0, max_y)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -469,7 +469,7 @@ outcomes_t2_ins3yrs <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Percentage (%)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits=c(0,105), breaks=c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -693,7 +693,7 @@ outcomes_t2_ins1yr <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Incidence rate (per 100 person-years)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits = c(0, max_y)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -714,7 +714,7 @@ outcomes_t2_ins1yr <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Percentage (%)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "darkred", "ref_type_2"="darkgoldenrod2")) +
+    scale_fill_manual("legend", labels=c("type_2_misclass"="type 2 potentially misclassified", "ref_type_2"="Reference type 2"), values = c("type_2_misclass" = "#C04140", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits=c(0,105), breaks=c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -1450,7 +1450,7 @@ outcomes_t1 <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Incidence rate (per 100 person-years)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=legend_labels, values = c("type_1_misclass" = "darkred", "ref_type_1"="dodgerblue3")) +
+    scale_fill_manual("legend", labels=legend_labels, values = c("type_1_misclass" = "#C04140", "ref_type_1"="#8AA9D6")) +
     scale_y_continuous(limits = c(0, max_y)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
@@ -1471,7 +1471,7 @@ outcomes_t1 <- function(cohort_dataset, group_name) {
     theme_bw() +
     ylab("Percentage (%)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=c("type_1_misclass"="type 1 potentially misclassified", "ref_type_1"="Reference type 1"), values = c("type_1_misclass" = "darkred", "ref_type_1"="dodgerblue3")) +
+    scale_fill_manual("legend", labels=c("type_1_misclass"="type 1 potentially misclassified", "ref_type_1"="Reference type 1"), values = c("type_1_misclass" = "#C04140", "ref_type_1"="#8AA9D6")) +
     scale_y_continuous(limits=c(0,105), breaks=c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
