@@ -436,7 +436,7 @@ outcomes_thresholds_t2 <- function(cohort_dataset) {
     theme_bw() +
     ylab("Percentage (%)") +
     scale_x_discrete(expand = expansion(add = 0.5)) +
-    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass_0.8" = "#C04140", "type_2_misclass_0.7" = "#C15858", "type_2_misclass_0.6" = "#DD5352", "type_2_misclass_0.5" = "#E2696A", "type_2_misclass_0.4" = "#ED7374", "ref_type_2"="#F2C5A7")) +
+    scale_fill_manual("legend", labels=legend_labels, values = c("type_2_misclass_0.8" = "#C04140", "type_2_misclass_0.7" = "#DD5352", "type_2_misclass_0.6" = "#E2696A", "type_2_misclass_0.5" = "#ED7374", "type_2_misclass_0.4" = "#EDA89F", "ref_type_2"="#F2C5A7")) +
     scale_y_continuous(limits=c(0,105), breaks=c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) +
     theme(panel.grid.major.x = element_blank(),
           axis.title.y = element_text(size = 24),
