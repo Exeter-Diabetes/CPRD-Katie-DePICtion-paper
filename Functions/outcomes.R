@@ -248,7 +248,7 @@ outcomes_t2 <- function(cohort_dataset, group_name) {
   plot_width <- 22
   plot_height <- 10
   
-  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=100)
+  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=120)
   
   print(ggpubr::as_ggplot(plot)) #+
     #draw_plot_label(label = c("a)", "b)"), size = 24,  hjust=0, x = c(0, 0.43), y = c(1, 1)))
@@ -494,7 +494,7 @@ outcomes_t2_ins3yrs <- function(cohort_dataset, group_name) {
   plot_width <- 22
   plot_height <- 10
   
-  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=100)
+  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=120)
   
   print(ggpubr::as_ggplot(plot)) #+
   #draw_plot_label(label = c("a)", "b)"), size = 24,  hjust=0, x = c(0, 0.43), y = c(1, 1)))
@@ -739,7 +739,7 @@ outcomes_t2_ins1yr <- function(cohort_dataset, group_name) {
   plot_width <- 22
   plot_height <- 10
   
-  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=100)
+  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=120)
   
   print(ggpubr::as_ggplot(plot)) #+
   #draw_plot_label(label = c("a)", "b)"), size = 24,  hjust=0, x = c(0, 0.43), y = c(1, 1)))
@@ -1496,7 +1496,7 @@ outcomes_t1 <- function(cohort_dataset, group_name) {
   plot_width <- 22
   plot_height <- 10
   
-  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=100)
+  tiff(plot_file_name, width=plot_width, height=plot_height, units = "in", res=120)
   
   print(ggpubr::as_ggplot(plot)) #+
           #draw_plot_label(label = c("a)", "b)"), size = 24,  hjust=0, x = c(0, 0.43), y = c(1, 1)))
